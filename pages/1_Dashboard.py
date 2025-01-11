@@ -8,6 +8,11 @@ from utils import load_static_files
 # Carregar CSS e JS
 load_static_files()
 
+# Verificar se o usuário está logado
+if 'usuario_logado' not in st.session_state:
+    st.warning("Você precisa estar logado para acessar esta página.")
+    st.stop()  # Parar o código e não carregar o restante da página
+
 # Título da Página
 st.title("📊 Dashboard Principal")
 
@@ -33,37 +38,49 @@ ORDER BY ag.data, ag.hora;
 # Carregar os Dados
 df_agendamentos = pd.read_sql_query(query, conn)
 
-# --- 📅 TABELA INTERATIVA ---
+# Ajustar a coluna 'Horario' para garantir o formato 'HH:MM:SS'
+df_agendamentos['Horario'] = df_agendamentos['Horario'].apply(lambda x: f"{x}:00" if len(x.split(':')) == 2 else x)
+
+# Preparar DataFrame para conversão e concatenação
+df_agenda_func = df_agendamentos.copy()
+
+# Garantir que 'Data' seja convertido para datetime corretamente
+df_agenda_func['Data'] = pd.to_datetime(df_agenda_func['Data'], format='%Y-%m-%d').dt.date
+
+# Concatenar Data e Hora em uma nova coluna 'x_start'
+df_agenda_func['x_start'] = pd.to_datetime(df_agenda_func['Data'].astype(str) + ' ' + df_agenda_func['Horario'])
+
+# Criar a coluna 'x_end', que adiciona 30 minutos ao 'x_start'
+df_agenda_func['x_end'] = df_agenda_func['x_start'] + pd.Timedelta(minutes=30)
+
+# Exibir a tabela interativa
 st.write("### 📅 Próximos Agendamentos")
 
 # Configurar a tabela para ocupar toda a largura da tela
-gb = GridOptionsBuilder.from_dataframe(df_agendamentos)
+gb = GridOptionsBuilder.from_dataframe(df_agenda_func)
 gb.configure_pagination(paginationAutoPageSize=True)  # Paginação automática
 gb.configure_side_bar()  # Adiciona barra lateral para filtros
 gb.configure_default_column(resizable=True, sortable=True, filterable=True)
 grid_options = gb.build()
 
-AgGrid(df_agendamentos, gridOptions=grid_options, height=400, fit_columns_on_grid_load=True)
+AgGrid(df_agenda_func, gridOptions=grid_options, height=400, fit_columns_on_grid_load=True)
 
 st.markdown("---")
 
 # Filtros para Calendário
 col1, col2 = st.columns(2)
 with col1:
-    selected_funcionario = st.selectbox("Selecione o Funcionário",
-                                        ["Todos Funcionários"] + list(df_agendamentos['Funcionario'].unique()))
+    selected_funcionario = st.selectbox("Selecione o Funcionário", ["Todos Funcionários"] + list(df_agenda_func['Funcionario'].unique()))
 with col2:
     selected_week = st.date_input("Selecione a Semana", pd.Timestamp.now().date())
 
 # Preparar DataFrame para filtragem
-df_agenda_func = df_agendamentos.copy()
 df_agenda_func['Data'] = pd.to_datetime(df_agenda_func['Data']).dt.date
 
 # Filtrar por Semana
 df_agenda_func = df_agenda_func[
-    (df_agenda_func['Data'] >= selected_week) &
-    (df_agenda_func['Data'] < (selected_week + pd.Timedelta(days=7)))
-    ]
+    (df_agenda_func['Data'] >= selected_week) & (df_agenda_func['Data'] < (selected_week + pd.Timedelta(days=7)))
+]
 
 # Adicionar coluna para DateTime Completo
 df_agenda_func['x_start'] = pd.to_datetime(
