@@ -6,6 +6,11 @@ from utils import load_static_files
 # Carregar CSS e JS
 load_static_files()
 
+# Verificar se o usuário está logado
+if 'usuario_logado' not in st.session_state:
+    st.warning("Você precisa estar logado para acessar esta página.")
+    st.stop()  # Parar o código e não carregar o restante da página
+
 # Título da Página
 st.title("👤 Gestão de Funcionários")
 
