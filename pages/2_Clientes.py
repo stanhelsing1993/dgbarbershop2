@@ -6,6 +6,11 @@ from utils import load_static_files
 # Carregar CSS
 load_static_files()
 
+# Verificar se o usuário está logado
+if 'usuario_logado' not in st.session_state:
+    st.warning("Você precisa estar logado para acessar esta página.")
+    st.stop()  # Parar o código e não carregar o restante da página
+
 # Conectar ao Banco de Dados
 conn = sqlite3.connect('barbearia.db')
 cursor = conn.cursor()
@@ -34,9 +39,12 @@ st.write("### 📋 Lista de Clientes")
 df_clientes = pd.DataFrame(clientes, columns=["ID", "Nome", "Telefone", "Email"])
 
 # Estilizar a tabela
-st.table(df_clientes.style.set_table_styles([
-    {'selector': 'thead th', 'props': [('background-color', '#4CAF50'), ('color', 'white'), ('text-align', 'center')]},
-    {'selector': 'tbody tr:nth-child(even)', 'props': [('background-color', '#f2f2f2')]},
-    {'selector': 'tbody tr:hover', 'props': [('background-color', '#ddd')]},
-    {'selector': 'td', 'props': [('text-align', 'center'), ('padding', '10px')]}
-]))
+st.table(df_clientes.style.set_table_styles([{
+    'selector': 'thead th', 'props': [('background-color', '#4CAF50'), ('color', 'white'), ('text-align', 'center')]
+}, {
+    'selector': 'tbody tr:nth-child(even)', 'props': [('background-color', '#f2f2f2')]
+}, {
+    'selector': 'tbody tr:hover', 'props': [('background-color', '#ddd')]
+}, {
+    'selector': 'td', 'props': [('text-align', 'center'), ('padding', '10px')]
+}]))
