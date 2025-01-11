@@ -50,5 +50,12 @@ def create_tables():
     )
     ''')
 
+
+    cursor.execute('''CREATE TABLE usuarios (
+    id INTEGER PRIMARY KEY,
+    nome_usuario TEXT NOT NULL UNIQUE,
+    senha TEXT NOT NULL
+    )''')
+
     conn.commit()
     conn.close()
