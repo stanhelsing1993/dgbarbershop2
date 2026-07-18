@@ -4,7 +4,7 @@ import os
 # Função para carregar arquivos estáticos
 def load_static_files():
     static_dir = "static"
-    css_files = ["style.css"]  # Adicionei o style.css
+    css_files = [ "style.css"]  # Adicionei o style.css
     js_files = ["bootstrap.bundle.min.js"]
 
     # Carrega CSS
