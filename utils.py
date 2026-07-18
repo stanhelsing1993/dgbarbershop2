@@ -1,28 +1,14 @@
+from pathlib import Path
+
 import streamlit as st
-import os
 
-# Função para carregar arquivos estáticos
-def load_static_files():
-    static_dir = "static"
-    css_files = ["style.css"]  # Adicionei o style.css
-    js_files = ["bootstrap.bundle.min.js"]
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
-    # Carrega CSS
-    for css_file in css_files:
-        file_path = os.path.join(static_dir, css_file)
-        if os.path.exists(file_path):
-            with open(file_path, "r") as f:
-                css = f.read()
-                st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
-        else:
-            st.warning(f"Arquivo CSS não encontrado: {css_file}")
 
-    # Carrega JS
-    for js_file in js_files:
-        file_path = os.path.join(static_dir, js_file)
-        if os.path.exists(file_path):
-            with open(file_path, "r") as f:
-                js = f.read()
-                st.markdown(f"<script>{js}</script>", unsafe_allow_html=True)
-        else:
-            st.warning(f"Arquivo JS não encontrado: {js_file}")
+def load_static_files() -> None:
+    """Injeta o CSS customizado do projeto em cada página."""
+    for css_file in ("style.css",):
+        file_path = STATIC_DIR / css_file
+        if file_path.exists():
+            css = file_path.read_text(encoding="utf-8")
+            st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)

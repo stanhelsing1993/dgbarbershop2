@@ -1,168 +1,217 @@
-import streamlit as st
+from datetime import date, timedelta
+
 import pandas as pd
-import sqlite3
 import plotly.express as px
+import streamlit as st
 from st_aggrid import AgGrid, GridOptionsBuilder
+
+from src.database.connection import get_session
+from src.database.models import STATUS_CONCLUIDO
+from src.repositories import cliente_repository
+from src.services import dashboard_service
+from src.services.agendamento_service import STATUS_LABELS
+from src.ui.components import moeda, percentual
+from src.ui.theme import registrar_tema
 from utils import load_static_files
 
-# Carregar CSS e JS
 load_static_files()
+registrar_tema()
 
-# Verificar se o usuário está logado
-if 'usuario_logado' not in st.session_state:
+if "usuario_logado" not in st.session_state:
     st.warning("Você precisa estar logado para acessar esta página.")
-    st.stop()  # Parar o código e não carregar o restante da página
+    st.stop()
 
-# Título da Página
-st.title("📊 Dashboard Principal")
+st.title("📊 Dashboard")
 
-# Conectar ao Banco de Dados
-conn = sqlite3.connect('barbearia.db')
+with get_session() as session:
+    linhas = dashboard_service.listar_agendamentos_detalhado(session)
+    total_clientes = cliente_repository.contar(session)
 
-# Query com JOINs para substituir IDs pelos nomes correspondentes
-query = """
-SELECT 
-    ag.id AS ID,
-    c.nome AS Cliente,
-    f.nome AS Funcionario,
-    s.nome AS Servico,
-    ag.data AS Data,
-    ag.hora AS Horario
-FROM agendamentos ag
-JOIN clientes c ON ag.cliente_id = c.id
-JOIN funcionarios f ON ag.funcionario_id = f.id
-JOIN servicos s ON ag.servico_id = s.id
-ORDER BY ag.data, ag.hora;
-"""
+df = pd.DataFrame(
+    [
+        {
+            "Cliente": r.cliente,
+            "Funcionario": r.funcionario,
+            "Servico": r.servico,
+            "Preco": r.preco,
+            "Data": r.data,
+            "Hora": r.hora,
+            "Status": r.status,
+        }
+        for r in linhas
+    ]
+)
 
-# Carregar os Dados
-df_agendamentos = pd.read_sql_query(query, conn)
+if df.empty:
+    st.info("Nenhum agendamento cadastrado ainda. Comece pela página Agenda. 💈")
+    st.stop()
 
-# Ajustar a coluna 'Horario' para garantir o formato 'HH:MM:SS'
-df_agendamentos['Horario'] = df_agendamentos['Horario'].apply(lambda x: f"{x}:00" if len(x.split(':')) == 2 else x)
+# ---------------------------------------------------------------- filtros
+hoje = date.today()
+PRESETS = {
+    "Hoje": (hoje, hoje),
+    "Últimos 7 dias": (hoje - timedelta(days=6), hoje),
+    "Últimos 30 dias": (hoje - timedelta(days=29), hoje),
+    "Mês atual": (hoje.replace(day=1), hoje),
+    "Todo o período": (None, None),
+    "Personalizado": None,
+}
 
-# Preparar DataFrame para conversão e concatenação
-df_agenda_func = df_agendamentos.copy()
+col_periodo, col_func, col_custom = st.columns([1.1, 1, 1.6])
+with col_periodo:
+    periodo = st.selectbox("📆 Período", options=list(PRESETS.keys()), index=2)
+with col_func:
+    funcionario_sel = st.selectbox("🧑‍🔧 Funcionário", ["Todos"] + sorted(df["Funcionario"].unique()))
 
-# Garantir que 'Data' seja convertido para datetime corretamente
-df_agenda_func['Data'] = pd.to_datetime(df_agenda_func['Data'], format='%Y-%m-%d').dt.date
-
-# Concatenar Data e Hora em uma nova coluna 'x_start'
-df_agenda_func['x_start'] = pd.to_datetime(df_agenda_func['Data'].astype(str) + ' ' + df_agenda_func['Horario'])
-
-# Criar a coluna 'x_end', que adiciona 30 minutos ao 'x_start'
-df_agenda_func['x_end'] = df_agenda_func['x_start'] + pd.Timedelta(minutes=30)
-
-# Exibir a tabela interativa
-st.write("### 📅 Próximos Agendamentos")
-
-# Configurar a tabela para ocupar toda a largura da tela
-gb = GridOptionsBuilder.from_dataframe(df_agenda_func)
-gb.configure_pagination(paginationAutoPageSize=True)  # Paginação automática
-gb.configure_side_bar()  # Adiciona barra lateral para filtros
-gb.configure_default_column(resizable=True, sortable=True, filterable=True)
-grid_options = gb.build()
-
-AgGrid(df_agenda_func, gridOptions=grid_options, height=400, fit_columns_on_grid_load=True)
-
-st.markdown("---")
-
-# Filtros para Calendário
-col1, col2 = st.columns(2)
-with col1:
-    selected_funcionario = st.selectbox("Selecione o Funcionário", ["Todos Funcionários"] + list(df_agenda_func['Funcionario'].unique()))
-with col2:
-    selected_week = st.date_input("Selecione a Semana", pd.Timestamp.now().date())
-
-# Preparar DataFrame para filtragem
-df_agenda_func['Data'] = pd.to_datetime(df_agenda_func['Data']).dt.date
-
-# Filtrar por Semana
-df_agenda_func = df_agenda_func[
-    (df_agenda_func['Data'] >= selected_week) & (df_agenda_func['Data'] < (selected_week + pd.Timedelta(days=7)))
-]
-
-# Adicionar coluna para DateTime Completo
-df_agenda_func['x_start'] = pd.to_datetime(
-    df_agenda_func['Data'].astype(str) + ' ' + df_agenda_func['Horario'].astype(str))
-df_agenda_func['x_end'] = df_agenda_func['x_start'] + pd.Timedelta(minutes=30)
-
-# 📊 Exibir Gráficos
-st.write("## 📊 Gráficos de Agendamentos")
-
-if selected_funcionario == "Todos Funcionários":
-    st.write("### 🗓️ Agenda Geral - Data x Hora")
-    calendar_all = px.scatter(
-        df_agenda_func,
-        x='x_start',
-        y='Funcionario',
-        color='Servico',
-        title="📅 Agenda Geral - Data x Hora",
-        labels={'x_start': 'Data e Hora', 'Funcionario': 'Funcionário'}
-    )
-    calendar_all.update_traces(marker=dict(size=10))
-    calendar_all.update_layout(
-        xaxis_title="Data e Hora",
-        yaxis_title="Funcionário",
-        height=500
-    )
-    st.plotly_chart(calendar_all, use_container_width=True)
-
-    st.write("### 📊 Quantidade de Agendamentos por Funcionário")
-    count_chart = px.bar(
-        df_agenda_func,
-        x='Funcionario',
-        color='Servico',
-        title="📊 Agendamentos por Funcionário",
-        labels={'Funcionario': 'Funcionário', 'count': 'Quantidade'}
-    )
-    st.plotly_chart(count_chart, use_container_width=True)
-
-    st.write("### 📊 Distribuição de Serviços Agendados")
-    service_pie = px.pie(
-        df_agenda_func,
-        names='Servico',
-        title="🍰 Distribuição de Serviços Agendados"
-    )
-    st.plotly_chart(service_pie, use_container_width=True)
-
+if periodo == "Personalizado":
+    with col_custom:
+        intervalo = st.date_input(
+            "Intervalo", value=(hoje - timedelta(days=29), hoje), max_value=hoje, format="DD/MM/YYYY"
+        )
+    if not (isinstance(intervalo, tuple) and len(intervalo) == 2):
+        st.info("Selecione a data final do intervalo para continuar.")
+        st.stop()
+    inicio, fim = intervalo
 else:
-    st.write(f"### 🗓️ Agenda de {selected_funcionario} - Data x Hora")
-    df_func = df_agenda_func[df_agenda_func['Funcionario'] == selected_funcionario]
+    inicio, fim = PRESETS[periodo]
 
-    calendar_func = px.scatter(
-        df_func,
-        x='x_start',
-        y='Servico',
-        color='Cliente',
-        title=f"📅 Agenda de {selected_funcionario} - Data x Hora",
-        labels={'x_start': 'Data e Hora', 'Servico': 'Serviço'}
-    )
-    calendar_func.update_traces(marker=dict(size=10))
-    calendar_func.update_layout(
-        xaxis_title="Data e Hora",
-        yaxis_title="Serviço",
-        height=500
-    )
-    st.plotly_chart(calendar_func, use_container_width=True)
 
-    st.write("### 📊 Distribuição de Serviços do Funcionário")
-    service_pie_func = px.pie(
-        df_func,
-        names='Servico',
-        title=f"🍰 Distribuição de Serviços de {selected_funcionario}"
-    )
-    st.plotly_chart(service_pie_func, use_container_width=True)
+def _filtrar(base: pd.DataFrame, data_inicio, data_fim, funcionario: str) -> pd.DataFrame:
+    filtrado = base
+    if funcionario != "Todos":
+        filtrado = filtrado[filtrado["Funcionario"] == funcionario]
+    if data_inicio is not None:
+        filtrado = filtrado[(filtrado["Data"] >= data_inicio) & (filtrado["Data"] <= data_fim)]
+    return filtrado
 
-    st.write("### 📊 Quantidade de Agendamentos por Data")
-    count_chart_func = px.bar(
-        df_func,
-        x='Data',
-        color='Servico',
-        title=f"📊 Agendamentos de {selected_funcionario} por Data",
-        labels={'Data': 'Data', 'count': 'Quantidade'}
-    )
-    st.plotly_chart(count_chart_func, use_container_width=True)
 
-# Fechar Conexão
-conn.close()
+df_atual = _filtrar(df, inicio, fim, funcionario_sel)
+metricas = dashboard_service.calcular_metricas(df_atual)
+
+# Comparativo com o período imediatamente anterior de mesma duração.
+deltas: dict = {}
+if inicio is not None:
+    duracao = fim - inicio
+    anterior_fim = inicio - timedelta(days=1)
+    anterior_inicio = anterior_fim - duracao
+    metricas_ant = dashboard_service.calcular_metricas(_filtrar(df, anterior_inicio, anterior_fim, funcionario_sel))
+
+    def _variacao(atual: float, anterior: float):
+        if not anterior:
+            return None
+        return f"{(atual - anterior) / anterior * 100:+.1f}%".replace(".", ",")
+
+    def _pontos(atual: float, anterior: float):
+        return f"{(atual - anterior) * 100:+.1f} p.p.".replace(".", ",")
+
+    deltas = {
+        "agendamentos": _variacao(metricas["total_agendamentos"], metricas_ant["total_agendamentos"]),
+        "receita": _variacao(metricas["receita"], metricas_ant["receita"]),
+        "ticket": _variacao(metricas["ticket_medio"], metricas_ant["ticket_medio"]),
+        "cancelamento": _pontos(metricas["taxa_cancelamento"], metricas_ant["taxa_cancelamento"]),
+        "no_show": _pontos(metricas["taxa_no_show"], metricas_ant["taxa_no_show"]),
+    }
+
+# ---------------------------------------------------------------- métricas
+st.markdown("## 📈 Visão Geral")
+
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("👥 Total de Clientes", total_clientes, help="Clientes cadastrados na base (não varia com o filtro).")
+col2.metric("📋 Agendamentos", metricas["total_agendamentos"], delta=deltas.get("agendamentos"))
+col3.metric("💵 Receita (Concluídos)", moeda(metricas["receita"]), delta=deltas.get("receita"))
+col4.metric("🎯 Ticket Médio", moeda(metricas["ticket_medio"]), delta=deltas.get("ticket"))
+
+col5, col6, col7, col8 = st.columns(4)
+col5.metric(
+    "❌ Taxa de Cancelamento",
+    percentual(metricas["taxa_cancelamento"]),
+    delta=deltas.get("cancelamento"),
+    delta_color="inverse",
+)
+col6.metric(
+    "🚪 Taxa de No-show",
+    percentual(metricas["taxa_no_show"]),
+    delta=deltas.get("no_show"),
+    delta_color="inverse",
+)
+col7.metric("✂️ Serviço Mais Vendido", metricas["servico_mais_vendido"] or "—")
+col8.metric("🏆 Barbeiro Destaque", metricas["barbeiro_top"] or "—")
+
+if deltas:
+    st.caption(
+        f"Setas comparam com o período anterior de mesma duração "
+        f"({anterior_inicio.strftime('%d/%m/%Y')} a {anterior_fim.strftime('%d/%m/%Y')})."
+    )
+
+# ---------------------------------------------------------------- gráficos
+if df_atual.empty:
+    st.info("Nenhum agendamento no período selecionado.")
+    st.stop()
+
+st.markdown("## 📊 Análises")
+concluidos = df_atual[df_atual["Status"] == STATUS_CONCLUIDO]
+
+g1, g2 = st.columns(2)
+with g1:
+    st.write("#### 💵 Receita por Dia")
+    if concluidos.empty:
+        st.info("Sem atendimentos concluídos no período.")
+    else:
+        receita_dia = concluidos.groupby("Data")["Preco"].sum().reset_index(name="Receita")
+        fig = px.bar(receita_dia, x="Data", y="Receita", labels={"Receita": "Receita (R$)"})
+        fig.update_layout(height=300)
+        st.plotly_chart(fig, use_container_width=True)
+
+with g2:
+    st.write("#### 📅 Atendimentos por Dia")
+    atendimentos_dia = df_atual.groupby("Data").size().reset_index(name="Atendimentos")
+    fig = px.bar(atendimentos_dia, x="Data", y="Atendimentos")
+    fig.update_layout(height=300)
+    st.plotly_chart(fig, use_container_width=True)
+
+g3, g4 = st.columns(2)
+with g3:
+    st.write("#### ✂️ Serviços Mais Vendidos")
+    if concluidos.empty:
+        st.info("Sem atendimentos concluídos no período.")
+    else:
+        servicos_populares = concluidos["Servico"].value_counts().reset_index()
+        servicos_populares.columns = ["Servico", "Quantidade"]
+        fig = px.bar(
+            servicos_populares.sort_values("Quantidade"),
+            x="Quantidade",
+            y="Servico",
+            orientation="h",
+            labels={"Servico": ""},
+        )
+        fig.update_layout(height=300)
+        st.plotly_chart(fig, use_container_width=True)
+
+with g4:
+    st.write("#### 🧑‍🔧 Faturamento por Funcionário")
+    if concluidos.empty:
+        st.info("Sem atendimentos concluídos no período.")
+    else:
+        faturamento_func = concluidos.groupby("Funcionario")["Preco"].sum().reset_index()
+        fig = px.bar(faturamento_func, x="Funcionario", y="Preco", labels={"Preco": "Faturamento (R$)", "Funcionario": ""})
+        fig.update_layout(height=300)
+        st.plotly_chart(fig, use_container_width=True)
+
+# ---------------------------------------------------------------- detalhes
+with st.expander("🗓️ Agenda detalhada do período"):
+    colunas_grid = ["Cliente", "Funcionario", "Servico", "Data", "Hora", "Status"]
+    df_grid = df_atual[colunas_grid].assign(
+        Data=df_atual["Data"].map(lambda d: d.strftime("%d/%m/%Y")),
+        Status=df_atual["Status"].map(lambda s: STATUS_LABELS.get(s, s)),
+    )
+    gb = GridOptionsBuilder.from_dataframe(df_grid)
+    gb.configure_pagination(paginationAutoPageSize=True)
+    gb.configure_side_bar()
+    gb.configure_default_column(resizable=True, sortable=True, filterable=True)
+    AgGrid(df_grid, gridOptions=gb.build(), height=400, fit_columns_on_grid_load=True)
+    st.download_button(
+        "📥 Exportar CSV",
+        data=df_grid.to_csv(index=False).encode("utf-8-sig"),
+        file_name="agendamentos_periodo.csv",
+        mime="text/csv",
+    )

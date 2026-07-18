@@ -1,8 +1,13 @@
-
-streamlit==1.35.0
+streamlit==1.39.0
 pandas==2.2.2
 plotly==5.22.0
-sqlite3
+SQLAlchemy==2.0.35
+# greenlet mais novo não tem wheel para Python 3.9 no Windows (exige compilador C++)
+greenlet==3.1.1
+# bcrypt >= 4.1 usa wheels abi3 que exigem Python >= 3.9.1 (falha DLL no 3.9.0)
+bcrypt==4.0.1
+python-dotenv==1.0.1
 XlsxWriter
 pytz
 streamlit-aggrid
+pytest==8.3.3

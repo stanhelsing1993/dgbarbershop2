@@ -1,234 +1,99 @@
-/* Estilização Geral */
-body {
-    background-color: #2c2c2c; /* Fundo escuro */
-    color: #f5f5f5; /* Texto claro */
-    font-family: 'Arial', sans-serif;
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&display=swap');
+
+/* Tema Barbearia — charcoal + dourado.
+   As cores base (fundo, texto, botão primário) vêm do [theme] em .streamlit/config.toml;
+   aqui ficam só a tipografia de marca e os cartões. */
+
+:root {
+    --ouro: #d4af37;
+    --ouro-escuro: #b8860b;
+    --superficie: #211d17;
+    --tinta: #ebe4d8;
+    --tinta-2: #b6ac9c;
+    --hairline: rgba(255, 255, 255, 0.08);
+    --borda-ouro: rgba(212, 175, 55, 0.25);
 }
 
-/* Título Principal */
+/* Tipografia de marca */
 h1, h2, h3 {
-    color: #d4af37; /* Dourado */
+    font-family: 'Oswald', 'Segoe UI', sans-serif !important;
+    color: var(--ouro) !important;
+    letter-spacing: 0.04em;
+    font-weight: 500 !important;
+}
+
+/* Cabeçalho de marca (app.py) */
+.marca-barbearia {
     text-align: center;
-    font-weight: bold;
+    margin-bottom: 1.5rem;
 }
 
-/* Seções de Texto */
-p {
-    color: #000 !important;
+.marca-barbearia h1 {
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 0.3rem;
 }
 
-/* Caixa de Seleção (Selectbox) */
-.stSelectbox {
-    background-color: #444;
-    color: #fff;
-    border-radius: 5px;
-}
-/* Estilo personalizado para o st.date_input */
-   .stDateInput{
-   background-color: #444;
-   color: #fff;
-   border-radius: 5px;
-   border: 1px solid #666;
-   padding: 5px;
-   }
-
-
-/* Caixa de Seleção (stdate_input) */
-.stdate_input {
-    background-color: #444;
-    color: #fff;
-    border-radius: 5px;
+.marca-barbearia .divisa {
+    height: 4px;
+    width: 140px;
+    margin: 0.4rem auto;
+    border-radius: 2px;
+    background: repeating-linear-gradient(135deg,
+        var(--ouro) 0 10px,
+        transparent 10px 14px);
 }
 
-/* Tabela */
-.stDataFrame, .stAgGrid {
-    background-color: #333;
-    color: #fff;
+.marca-barbearia .tagline {
+    color: var(--tinta-2);
+    font-size: 0.8rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    margin: 0;
 }
 
-/* Botões */
-.stButton > button {
-    background-color: #d4af37;
-    color: #2c2c2c;
-    border-radius: 5px;
-    font-weight: bold;
+/* Formulários como cartões */
+[data-testid="stForm"] {
+    background: var(--superficie);
+    border: 1px solid var(--hairline);
+    border-top: 3px solid var(--ouro);
+    border-radius: 12px;
+    padding: 1.4rem 1.6rem;
 }
 
-.stButton > button:hover {
-    background-color: #b8860b;
-    color: #fff;
-}
-
-/* Gráficos */
-.stPlotlyChart {
-    border: 2px solid #d4af37;
+/* Métricas como painéis */
+[data-testid="stMetric"] {
+    background: var(--superficie);
+    border: 1px solid var(--hairline);
+    border-left: 3px solid var(--ouro);
     border-radius: 10px;
+    padding: 0.9rem 1.1rem;
 }
 
-/* Rodapé */
-footer {
-    text-align: center;
-    color: #aaa;
-    font-size: 12px;
-    margin-top: 30px;
+[data-testid="stMetricLabel"] {
+    color: var(--tinta-2) !important;
 }
 
-/* Barra Lateral */
-.stSidebar {
-    background-color: #3a3a3a;
-    color: #fff;
-    border-right: 2px solid #d4af37;
+[data-testid="stMetricValue"] {
+    color: var(--tinta) !important;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Barra lateral */
+[data-testid="stSidebar"] {
+    border-right: 1px solid var(--borda-ouro);
+}
+
+/* Divisores */
+hr {
+    border-color: var(--hairline);
 }
 
 /* Links */
-a {
-    color: #d4af37;
+a, a:visited {
+    color: var(--ouro);
 }
 
 a:hover {
-    color: #b8860b;
-}
-
-/* Estilização do Formulário */
-.stForm {
-    background-color: #3a3a3a; /* Fundo escuro */
-    border: 2px solid #d4af37; /* Borda dourada */
-    border-radius: 10px;
-    padding: 20px;
-    margin: 20px 0;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-
-/* Títulos dentro do Formulário */
-.stForm h3 {
-    color: #d4af37;
-    text-align: center;
-}
-
-/* Campos de Input */
-.stTextInput, .stNumberInput, .stDateInput {
-    margin-bottom: 15px;
-}
-
-.stTextInput > label,
-.stNumberInput > label,
-.stDateInput > label {
-    color: #fff;
-    font-weight: bold;
-}
-
-/* Botão dentro do Formulário */
-.stForm button {
-    background-color: #d4af37;
-    color: #2c2c2c;
-    font-weight: bold;
-    border-radius: 5px;
-    padding: 8px 16px;
-    margin-top: 10px;
-}
-
-.stForm button:hover {
-    background-color: #b8860b;
-    color: #fff;
-}
-
-/* Título da Seção */
-.stMarkdown h3 {
-    background-color: #3a3a3a; /* Fundo escuro */
-    color: #d4af37; /* Dourado */
-    border-left: 5px solid #d4af37;
-    padding: 8px 12px;
-    margin: 10px 0;
-    border-radius: 5px;
-    font-size: 1.5em;
-    font-weight: bold;
-}
-
-
-/* Tabela de Clientes */
-.clientes-container {
-    background-color: #2c2c2c; /* Fundo mais escuro */
-    border: 1px solid #d4af37; /* Borda dourada */
-    border-radius: 8px;
-    padding: 10px;
-    margin: 10px 0;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-
-.clientes-container table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.clientes-container th,
-.clientes-container td {
-    border: 1px solid #444; /* Borda interna */
-    padding: 8px 12px;
-    text-align: left;
-}
-
-.clientes-container th {
-    background-color: #3a3a3a; /* Fundo para cabeçalhos */
-    color: #d4af37; /* Dourado */
-    font-weight: bold;
-}
-
-.clientes-container td {
-    color: #f0f0f0; /* Texto claro */
-}
-
-/* Linhas alternadas */
-.clientes-container tr:nth-child(even) {
-    background-color: #3d3d3d; /* Fundo alternado */
-}
-
-/* 🎯 Estilização Exclusiva para st.metric */
-
-/* Estilizar Labels do st.metric */
-div[data-testid="stMetric"] > div > div > span {
-    color: #000000 !important; /* Preto */
-    font-weight: bold !important; /* Negrito */
-}
-
-/* Estilizar Valores do st.metric */
-div[data-testid="stMetricValue"] {
-    color: #000000 !important; /* Preto */
-    font-weight: bold !important; /* Negrito */
-}
-
-/* Garantir Herança nas Colunas */
-[data-testid="stHorizontalBlock"] div[data-testid="stMetric"] > div > div > span {
-    color: #000000 !important; /* Preto */
-    font-weight: bold !important; /* Negrito */
-}
-
-/* Estilização de Parágrafos dentro de qualquer .st-emotion-cache */
-.st-emotion-cache p {
-    color: #000 !important; /* Garantir que o texto seja preto */
-    font-size: inherit !important; /* Herda o tamanho de fonte do elemento pai */
-    margin: 10px 0 !important; /* Adiciona espaçamento */
-}
-
-/* Estilizando Parágrafos dentro das divs .st-emotion-cache especificamente */
-.st-emotion-cache div p {
-    color: #000 !important; /* Garantir que o texto seja preto */
-    font-size: inherit !important;
-}
-
-/* Estilizando Parágrafos dentro das colunas do Streamlit */
-.st-emotion-cache .stColumn p {
-    color: #000 !important; /* Garantir que o texto seja preto */
-    font-size: inherit !important;
-}
-
-/* Para Parágrafos em Tabelas */
-.st-emotion-cache .clientes-container td p {
-    color: #000 !important; /* Garantir que o texto seja preto */
-    margin: 0 !important; /* Remover margens extras */
-    font-size: 14px !important; /* Ajustar o tamanho da fonte, se necessário */
-}
-
-/* Estilos para Parágrafos em Seções do Formulário */
-.st-emotion-cache .stForm p {
-    color: #000 !important; /* Garantir que o texto seja preto no formulário */
+    color: var(--ouro-escuro);
 }
