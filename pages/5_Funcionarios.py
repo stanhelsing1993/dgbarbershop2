@@ -15,7 +15,7 @@ if st.session_state.get("role") != "admin":
     st.warning("Apenas administradores podem gerenciar funcionários.")
     st.stop()
 
-st.title("🧑‍🔧 Gestão de Funcionários")
+st.title("👥 Gestão de Funcionários")
 
 with st.form("funcionario_form"):
     nome_func = st.text_input("Nome do Funcionário")

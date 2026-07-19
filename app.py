@@ -82,7 +82,7 @@ if logged_in:
     if st.session_state.get("role") == "admin":
         paginas += [
             st.Page("pages/4_Servicos.py", title="Serviços", icon="✂️"),
-            st.Page("pages/5_Funcionarios.py", title="Funcionários", icon="🧑‍🔧"),
+            st.Page("pages/5_Funcionarios.py", title="Funcionários", icon="👥"),
             st.Page("pages/6_Faturamento.py", title="Faturamento", icon="💵"),
             st.Page("pages/9_Caixa.py", title="Caixa", icon="🧾"),
             st.Page("pages/10_Pagamentos.py", title="Pagamentos", icon="🤝"),

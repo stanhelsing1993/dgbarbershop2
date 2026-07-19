@@ -61,7 +61,7 @@ col_periodo, col_func, col_custom = st.columns([1.1, 1, 1.6])
 with col_periodo:
     periodo = st.selectbox("📆 Período", options=list(PRESETS.keys()), index=2)
 with col_func:
-    funcionario_sel = st.selectbox("🧑‍🔧 Funcionário", ["Todos"] + sorted(df["Funcionario"].unique()))
+    funcionario_sel = st.selectbox("👥 Funcionário", ["Todos"] + sorted(df["Funcionario"].unique()))
 
 if periodo == "Personalizado":
     with col_custom:
@@ -188,7 +188,7 @@ with g3:
         st.plotly_chart(fig, use_container_width=True)
 
 with g4:
-    st.write("#### 🧑‍🔧 Faturamento por Funcionário")
+    st.write("#### 👥 Faturamento por Funcionário")
     if concluidos.empty:
         st.info("Sem atendimentos concluídos no período.")
     else:

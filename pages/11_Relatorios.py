@@ -218,7 +218,7 @@ if not df_servicos.empty:
 else:
     st.info("Sem serviços concluídos no período.")
 
-st.write("#### 🧑‍🔧 Desempenho por funcionário")
+st.write("#### 👥 Desempenho por funcionário")
 df_desempenho = pd.DataFrame(desempenho)
 if not df_desempenho.empty:
     st.plotly_chart(
