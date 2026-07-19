@@ -49,8 +49,25 @@ def _migrate_legacy_schema(conn):
     """Traz bancos criados pela versão antiga (sqlite3 cru) para o schema atual. Idempotente."""
     tables = inspect(conn).get_table_names()
 
+    if "funcionarios" in tables:
+        _add_column_if_missing(
+            conn,
+            "funcionarios",
+            "percentual_comissao",
+            "percentual_comissao FLOAT NOT NULL DEFAULT 0.5",
+        )
+
+    if "adiantamentos" in tables:
+        _add_column_if_missing(
+            conn, "adiantamentos", "pagamento_id", "pagamento_id INTEGER REFERENCES pagamentos_funcionarios(id)"
+        )
+
+    if "clientes" in tables:
+        _add_column_if_missing(conn, "clientes", "bloqueado", "bloqueado BOOLEAN NOT NULL DEFAULT 0")
+
     if "agendamentos" in tables:
         _add_column_if_missing(conn, "agendamentos", "status", "status TEXT NOT NULL DEFAULT 'agendado'")
+        _add_column_if_missing(conn, "agendamentos", "forma_pagamento", "forma_pagamento TEXT")
         # A versão antiga gravava hora ora como 'HH:MM', ora como 'HH:MM:SS'.
         conn.execute(text("UPDATE agendamentos SET hora = substr(hora, 1, 5) WHERE length(hora) > 5"))
 

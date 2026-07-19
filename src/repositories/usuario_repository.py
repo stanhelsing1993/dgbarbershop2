@@ -19,3 +19,30 @@ def criar(session: Session, nome_usuario: str, senha_hash: str, role: str = "fun
     session.add(usuario)
     session.commit()
     return usuario
+
+
+def contar_admins(session: Session) -> int:
+    return len(list(session.scalars(select(Usuario).where(Usuario.role == "admin"))))
+
+
+def atualizar_role(session: Session, usuario_id: int, role: str) -> None:
+    usuario = session.get(Usuario, usuario_id)
+    if usuario is None:
+        return
+    usuario.role = role
+    session.commit()
+
+
+def atualizar_senha_hash(session: Session, usuario_id: int, senha_hash: str) -> None:
+    usuario = session.get(Usuario, usuario_id)
+    if usuario is None:
+        return
+    usuario.senha_hash = senha_hash
+    session.commit()
+
+
+def excluir(session: Session, usuario_id: int) -> None:
+    usuario = session.get(Usuario, usuario_id)
+    if usuario is not None:
+        session.delete(usuario)
+        session.commit()
