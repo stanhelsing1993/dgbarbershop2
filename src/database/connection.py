@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from src.config import ADMIN_PASSWORD, ADMIN_USERNAME, DATABASE_URL
 from src.database.models import Base
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# check_same_thread só existe (e só é preciso) no SQLite; em Postgres/MySQL não se aplica.
+_connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(DATABASE_URL, connect_args=_connect_args, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 

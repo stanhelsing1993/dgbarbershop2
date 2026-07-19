@@ -1,7 +1,11 @@
+from datetime import datetime
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
 
-from src.database.connection import get_session
+from src.config import DATABASE_URL
+from src.database.connection import engine, get_session
 from src.database.models import ROLES
 from src.repositories import usuario_repository
 from src.services import auth_service
@@ -101,3 +105,34 @@ if usuarios:
                     st.rerun()
                 except ValueError as exc:
                     st.error(str(exc))
+
+# --- Backup do banco (somente SQLite) ---
+if DATABASE_URL.startswith("sqlite"):
+    st.markdown("---")
+    st.write("### 💾 Backup do Banco de Dados")
+    st.caption(
+        "Em hospedagens como o Streamlit Cloud o banco SQLite é apagado a cada redeploy. "
+        "Baixe o backup regularmente (especialmente antes de atualizar o app) e restaure-o "
+        "depois do redeploy. Para persistência definitiva, configure um `DATABASE_URL` "
+        "de Postgres nos secrets."
+    )
+    caminho_db = Path(DATABASE_URL.replace("sqlite:///", ""))
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if caminho_db.exists():
+            st.download_button(
+                "📥 Baixar backup (barbearia.db)",
+                data=caminho_db.read_bytes(),
+                file_name=f"barbearia_backup_{datetime.now().strftime('%Y%m%d_%H%M')}.db",
+                mime="application/octet-stream",
+            )
+        else:
+            st.info("Arquivo do banco ainda não existe.")
+    with col2:
+        arquivo = st.file_uploader("Restaurar backup (.db)", type=["db"])
+        if arquivo is not None and st.button("♻️ Restaurar este backup", type="primary"):
+            engine.dispose()  # solta as conexões para liberar o arquivo no Windows
+            caminho_db.write_bytes(arquivo.getvalue())
+            st.success("✅ Backup restaurado. Recarregando…")
+            st.rerun()
