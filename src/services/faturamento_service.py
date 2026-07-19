@@ -1,4 +1,5 @@
 from datetime import date
+from types import SimpleNamespace
 from typing import Optional
 
 from sqlalchemy import func, select
@@ -69,30 +70,36 @@ def faturamento_por_periodo(
     return session.execute(stmt).all()
 
 
-def faturamento_por_mes(session: Session):
-    mes_expr = func.strftime("%m-%Y", Agendamento.data).label("mes")
+def _datas_e_precos_concluidos(session: Session):
     stmt = (
-        select(mes_expr, func.coalesce(func.sum(Servico.preco), 0.0).label("faturamento"))
+        select(Agendamento.data, Servico.preco)
         .select_from(Agendamento)
         .join(Servico, Agendamento.servico_id == Servico.id)
         .where(Agendamento.status == STATUS_CONCLUIDO)
-        .group_by(mes_expr)
-        .order_by(mes_expr.desc())
     )
     return session.execute(stmt).all()
+
+
+def faturamento_por_mes(session: Session):
+    # Agregação em Python para funcionar em qualquer banco (strftime é só do SQLite).
+    por_mes: dict[tuple[int, int], float] = {}
+    for dia, preco in _datas_e_precos_concluidos(session):
+        chave = (dia.year, dia.month)
+        por_mes[chave] = por_mes.get(chave, 0.0) + preco
+    return [
+        SimpleNamespace(mes=f"{mes:02d}-{ano}", faturamento=round(valor, 2))
+        for (ano, mes), valor in sorted(por_mes.items(), reverse=True)
+    ]
 
 
 def faturamento_por_ano(session: Session):
-    ano_expr = func.strftime("%Y", Agendamento.data).label("ano")
-    stmt = (
-        select(ano_expr, func.coalesce(func.sum(Servico.preco), 0.0).label("faturamento"))
-        .select_from(Agendamento)
-        .join(Servico, Agendamento.servico_id == Servico.id)
-        .where(Agendamento.status == STATUS_CONCLUIDO)
-        .group_by(ano_expr)
-        .order_by(ano_expr.desc())
-    )
-    return session.execute(stmt).all()
+    por_ano: dict[int, float] = {}
+    for dia, preco in _datas_e_precos_concluidos(session):
+        por_ano[dia.year] = por_ano.get(dia.year, 0.0) + preco
+    return [
+        SimpleNamespace(ano=str(ano), faturamento=round(valor, 2))
+        for ano, valor in sorted(por_ano.items(), reverse=True)
+    ]
 
 
 def receita_por_forma_pagamento(

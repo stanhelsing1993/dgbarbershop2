@@ -2,6 +2,8 @@ streamlit==1.39.0
 pandas==2.2.2
 plotly==5.22.0
 SQLAlchemy==2.0.35
+# Driver Postgres para produção (DATABASE_URL=postgresql+psycopg2://...)
+psycopg2-binary==2.9.9
 # greenlet mais novo não tem wheel para Python 3.9 no Windows (exige compilador C++)
 greenlet==3.1.1
 # bcrypt >= 4.1 usa wheels abi3 que exigem Python >= 3.9.1 (falha DLL no 3.9.0)
