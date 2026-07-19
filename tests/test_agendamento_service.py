@@ -10,11 +10,13 @@ from src.services.agendamento_service import ConflitoDeHorarioError
 @pytest.fixture()
 def cadastro_basico(session):
     cliente = cliente_repository.criar(session, "Cliente Teste", "11999999999", "cliente@teste.com")
+    cliente_b = cliente_repository.criar(session, "Cliente B", "11888888888", "b@teste.com")
     funcionario_a = funcionario_repository.criar(session, "Funcionário A", "Barbeiro")
     funcionario_b = funcionario_repository.criar(session, "Funcionário B", "Barbeiro")
     servico = servico_repository.criar(session, "Corte", 50.0, 30)
     return {
         "cliente_id": cliente.id,
+        "cliente_b_id": cliente_b.id,
         "funcionario_a_id": funcionario_a.id,
         "funcionario_b_id": funcionario_b.id,
         "servico_id": servico.id,
@@ -46,7 +48,7 @@ def test_conflito_mesmo_funcionario_mesmo_horario(session, cadastro_basico):
     with pytest.raises(ConflitoDeHorarioError):
         agendamento_service.criar_agendamento(
             session,
-            cadastro_basico["cliente_id"],
+            cadastro_basico["cliente_b_id"],
             cadastro_basico["funcionario_a_id"],
             cadastro_basico["servico_id"],
             date(2026, 8, 10),
@@ -65,7 +67,7 @@ def test_mesmo_horario_funcionarios_diferentes_nao_conflita(session, cadastro_ba
     )
     agendamento = agendamento_service.criar_agendamento(
         session,
-        cadastro_basico["cliente_id"],
+        cadastro_basico["cliente_b_id"],
         cadastro_basico["funcionario_b_id"],
         cadastro_basico["servico_id"],
         date(2026, 8, 10),
@@ -99,13 +101,20 @@ def test_grade_nao_inclui_horario_de_fechamento(session, cadastro_basico):
     assert "19:00" not in horarios
 
 
-def test_horarios_de_hoje_excluem_horas_ja_passadas(session, cadastro_basico):
+def test_horarios_de_hoje_ficam_indisponiveis_pela_antecedencia(session, cadastro_basico):
     agora = datetime(2026, 8, 10, 12, 10)
     horarios = agendamento_service.horarios_disponiveis(
         session, cadastro_basico["funcionario_a_id"], date(2026, 8, 10), agora=agora
     )
-    assert "12:00" not in horarios
-    assert "12:30" in horarios
+    assert horarios == []
+
+
+def test_horarios_de_amanha_disponiveis(session, cadastro_basico):
+    agora = datetime(2026, 8, 10, 12, 10)
+    horarios = agendamento_service.horarios_disponiveis(
+        session, cadastro_basico["funcionario_a_id"], date(2026, 8, 11), agora=agora
+    )
+    assert "08:00" in horarios
 
 
 def test_horarios_de_data_passada_retorna_vazio(session, cadastro_basico):
@@ -126,6 +135,62 @@ def test_criar_agendamento_em_data_passada_levanta_erro(session, cadastro_basico
             date(2020, 1, 1),
             "10:00",
         )
+
+
+def test_criar_agendamento_para_hoje_exige_antecedencia(session, cadastro_basico):
+    with pytest.raises(ValueError):
+        agendamento_service.criar_agendamento(
+            session,
+            cadastro_basico["cliente_id"],
+            cadastro_basico["funcionario_a_id"],
+            cadastro_basico["servico_id"],
+            date(2026, 8, 10),
+            "10:00",
+            hoje=date(2026, 8, 10),
+        )
+
+
+def test_criar_agendamento_para_amanha_respeita_antecedencia(session, cadastro_basico):
+    agendamento = agendamento_service.criar_agendamento(
+        session,
+        cadastro_basico["cliente_id"],
+        cadastro_basico["funcionario_a_id"],
+        cadastro_basico["servico_id"],
+        date(2026, 8, 11),
+        "10:00",
+        hoje=date(2026, 8, 10),
+    )
+    assert agendamento.id is not None
+
+
+def test_concluir_antes_do_horario_levanta_erro(session, cadastro_basico):
+    agendamento = agendamento_service.criar_agendamento(
+        session,
+        cadastro_basico["cliente_id"],
+        cadastro_basico["funcionario_a_id"],
+        cadastro_basico["servico_id"],
+        date(2026, 8, 10),
+        "15:00",
+    )
+    with pytest.raises(agendamento_service.ConclusaoAntecipadaError):
+        agendamento_service.alterar_status(
+            session, agendamento.id, "concluido", agora=datetime(2026, 8, 10, 14, 0)
+        )
+
+
+def test_concluir_apos_o_horario_funciona(session, cadastro_basico):
+    agendamento = agendamento_service.criar_agendamento(
+        session,
+        cadastro_basico["cliente_id"],
+        cadastro_basico["funcionario_a_id"],
+        cadastro_basico["servico_id"],
+        date(2026, 8, 10),
+        "15:00",
+    )
+    agendamento_service.alterar_status(
+        session, agendamento.id, "concluido", agora=datetime(2026, 8, 10, 15, 40)
+    )
+    assert agendamento.status == "concluido"
 
 
 def test_reativar_falha_se_horario_foi_tomado(session, cadastro_basico):
@@ -159,17 +224,20 @@ def test_reativar_proprio_agendamento_concluido_nao_conflita_consigo(session, ca
         date(2026, 8, 10),
         "10:00",
     )
-    agendamento_service.alterar_status(session, agendamento.id, "concluido")
+    agendamento_service.alterar_status(
+        session, agendamento.id, "concluido", agora=datetime(2026, 8, 10, 10, 30)
+    )
     agendamento_service.alterar_status(session, agendamento.id, "agendado")
     assert agendamento.status == "agendado"
 
 
 def test_alterar_status_em_lote(session, cadastro_basico):
     ids = []
-    for hora in ("10:00", "10:30", "11:00"):
+    for i, hora in enumerate(("10:00", "10:30", "11:00")):
+        cliente = cliente_repository.criar(session, f"Cliente Lote {i}", "1190000", "l@l.com")
         agendamento = agendamento_service.criar_agendamento(
             session,
-            cadastro_basico["cliente_id"],
+            cliente.id,
             cadastro_basico["funcionario_a_id"],
             cadastro_basico["servico_id"],
             date(2026, 8, 10),
@@ -177,7 +245,9 @@ def test_alterar_status_em_lote(session, cadastro_basico):
         )
         ids.append(agendamento.id)
 
-    alterados = agendamento_service.alterar_status_em_lote(session, ids, "concluido")
+    alterados = agendamento_service.alterar_status_em_lote(
+        session, ids, "concluido", agora=datetime(2026, 8, 10, 12, 0)
+    )
 
     assert alterados == 3
     linhas = agendamento_repository.listar_detalhado(session)
@@ -273,6 +343,177 @@ def test_horario_cancelado_volta_a_ficar_disponivel(session, cadastro_basico):
         session, cadastro_basico["funcionario_a_id"], date(2026, 8, 10)
     )
     assert "10:00" in horarios
+
+
+def test_concluir_grava_forma_pagamento(session, cadastro_basico):
+    agendamento = agendamento_service.criar_agendamento(
+        session,
+        cadastro_basico["cliente_id"],
+        cadastro_basico["funcionario_a_id"],
+        cadastro_basico["servico_id"],
+        date(2026, 8, 10),
+        "10:00",
+    )
+    agendamento_service.alterar_status(
+        session, agendamento.id, "concluido",
+        agora=datetime(2026, 8, 10, 11, 0), forma_pagamento="pix",
+    )
+    assert agendamento.forma_pagamento == "pix"
+
+
+def test_forma_pagamento_invalida_levanta_erro(session, cadastro_basico):
+    agendamento = agendamento_service.criar_agendamento(
+        session,
+        cadastro_basico["cliente_id"],
+        cadastro_basico["funcionario_a_id"],
+        cadastro_basico["servico_id"],
+        date(2026, 8, 10),
+        "10:00",
+    )
+    with pytest.raises(ValueError):
+        agendamento_service.alterar_status(
+            session, agendamento.id, "concluido",
+            agora=datetime(2026, 8, 10, 11, 0), forma_pagamento="cheque",
+        )
+
+
+def test_reabrir_limpa_forma_pagamento(session, cadastro_basico):
+    agendamento = agendamento_service.criar_agendamento(
+        session,
+        cadastro_basico["cliente_id"],
+        cadastro_basico["funcionario_a_id"],
+        cadastro_basico["servico_id"],
+        date(2026, 8, 10),
+        "10:00",
+    )
+    agendamento_service.alterar_status(
+        session, agendamento.id, "concluido",
+        agora=datetime(2026, 8, 10, 11, 0), forma_pagamento="dinheiro",
+    )
+    agendamento_service.alterar_status(session, agendamento.id, "agendado")
+    assert agendamento.forma_pagamento is None
+
+
+def test_avulso_grava_forma_pagamento(session, cadastro_basico):
+    agendamento = agendamento_service.lancar_atendimento_avulso(
+        session,
+        cadastro_basico["cliente_id"],
+        cadastro_basico["funcionario_a_id"],
+        cadastro_basico["servico_id"],
+        agora=datetime(2026, 8, 10, 14, 30),
+        forma_pagamento="cartao_credito",
+    )
+    assert agendamento.forma_pagamento == "cartao_credito"
+
+
+def test_agendamento_duplicado_bloqueia(session, cadastro_basico):
+    agendamento_service.criar_agendamento(
+        session,
+        cadastro_basico["cliente_id"],
+        cadastro_basico["funcionario_a_id"],
+        cadastro_basico["servico_id"],
+        date(2026, 8, 10),
+        "10:00",
+        hoje=date(2026, 8, 1),
+    )
+    with pytest.raises(agendamento_service.AgendamentoDuplicadoError):
+        agendamento_service.criar_agendamento(
+            session,
+            cadastro_basico["cliente_id"],
+            cadastro_basico["funcionario_a_id"],
+            cadastro_basico["servico_id"],
+            date(2026, 8, 12),
+            "11:00",
+            hoje=date(2026, 8, 1),
+        )
+
+
+def test_apos_cancelar_pode_agendar_de_novo(session, cadastro_basico):
+    agendamento = agendamento_service.criar_agendamento(
+        session,
+        cadastro_basico["cliente_id"],
+        cadastro_basico["funcionario_a_id"],
+        cadastro_basico["servico_id"],
+        date(2026, 8, 10),
+        "10:00",
+        hoje=date(2026, 8, 1),
+    )
+    agendamento_service.alterar_status(session, agendamento.id, "cancelado")
+    novo = agendamento_service.criar_agendamento(
+        session,
+        cadastro_basico["cliente_id"],
+        cadastro_basico["funcionario_a_id"],
+        cadastro_basico["servico_id"],
+        date(2026, 8, 12),
+        "11:00",
+        hoje=date(2026, 8, 1),
+    )
+    assert novo.id is not None
+
+
+def _cancelar_n_vezes(session, cadastro, n):
+    for i in range(n):
+        agendamento = agendamento_service.criar_agendamento(
+            session,
+            cadastro["cliente_id"],
+            cadastro["funcionario_a_id"],
+            cadastro["servico_id"],
+            date(2026, 8, 10 + i),
+            "10:00",
+            hoje=date(2026, 8, 1),
+        )
+        agendamento_service.alterar_status(session, agendamento.id, "cancelado")
+
+
+def test_blacklist_apos_3_cancelamentos(session, cadastro_basico):
+    _cancelar_n_vezes(session, cadastro_basico, 2)
+    cliente = cliente_repository.obter_por_id(session, cadastro_basico["cliente_id"])
+    assert not cliente.bloqueado  # 2 ainda não bloqueia
+
+    _cancelar_n_vezes(session, cadastro_basico, 1)
+    assert cliente.bloqueado  # 3ª falta liga a flag
+
+    with pytest.raises(agendamento_service.ClienteBloqueadoError):
+        agendamento_service.criar_agendamento(
+            session,
+            cadastro_basico["cliente_id"],
+            cadastro_basico["funcionario_a_id"],
+            cadastro_basico["servico_id"],
+            date(2026, 8, 20),
+            "10:00",
+            hoje=date(2026, 8, 1),
+        )
+
+
+def test_blacklist_com_nao_compareceu(session, cadastro_basico):
+    for i in range(3):
+        agendamento = agendamento_service.criar_agendamento(
+            session,
+            cadastro_basico["cliente_id"],
+            cadastro_basico["funcionario_a_id"],
+            cadastro_basico["servico_id"],
+            date(2026, 8, 10 + i),
+            "10:00",
+            hoje=date(2026, 8, 1),
+        )
+        agendamento_service.alterar_status(session, agendamento.id, "nao_compareceu")
+    cliente = cliente_repository.obter_por_id(session, cadastro_basico["cliente_id"])
+    assert cliente.bloqueado
+
+
+def test_desbloquear_cliente_permite_agendar(session, cadastro_basico):
+    _cancelar_n_vezes(session, cadastro_basico, 3)
+    cliente_repository.definir_bloqueio(session, cadastro_basico["cliente_id"], False)
+    agendamento = agendamento_service.criar_agendamento(
+        session,
+        cadastro_basico["cliente_id"],
+        cadastro_basico["funcionario_a_id"],
+        cadastro_basico["servico_id"],
+        date(2026, 8, 20),
+        "10:00",
+        hoje=date(2026, 8, 1),
+    )
+    assert agendamento.id is not None
 
 
 def test_horarios_disponiveis_nao_afeta_outro_funcionario(session, cadastro_basico):
