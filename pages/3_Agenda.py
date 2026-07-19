@@ -4,10 +4,17 @@ import pandas as pd
 import streamlit as st
 
 from src.database.connection import get_session
-from src.database.models import STATUS_AGENDADO
+from src.database.models import FORMAS_PAGAMENTO, STATUS_AGENDADO, STATUS_CONCLUIDO
 from src.repositories import agendamento_repository, cliente_repository, funcionario_repository, servico_repository
 from src.services import agendamento_service
-from src.services.agendamento_service import STATUS_LABELS, ConflitoDeHorarioError
+from src.services.agendamento_service import (
+    MENSAGEM_COMPROMISSO,
+    STATUS_LABELS,
+    AgendamentoDuplicadoError,
+    ClienteBloqueadoError,
+    ConclusaoAntecipadaError,
+    ConflitoDeHorarioError,
+)
 from src.ui.components import render_styled_table
 from utils import load_static_files
 
@@ -21,6 +28,7 @@ with get_session() as session:
     servicos_dict = {s.nome: s.id for s in servico_repository.listar(session)}
 
 st.write("### 📌 Novo Agendamento")
+st.info(MENSAGEM_COMPROMISSO)
 
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -32,7 +40,13 @@ with col2:
 with col3:
     servico = st.selectbox("Serviço", options=list(servicos_dict.keys()), index=None, placeholder="Selecione...")
 
-data = st.date_input("Data do Atendimento", value=None, min_value=date.today(), format="DD/MM/YYYY")
+data = st.date_input(
+    "Data do Atendimento",
+    value=None,
+    min_value=agendamento_service.data_minima_agendamento(),
+    format="DD/MM/YYYY",
+)
+st.caption("ℹ️ Agendamentos são feitos com pelo menos 1 dia de antecedência.")
 
 hora = None
 if data and funcionario:
@@ -61,7 +75,9 @@ if st.button("Agendar", type="primary"):
                 )
             st.success("✅ Agendamento realizado com sucesso!")
             st.rerun()
-        except (ConflitoDeHorarioError, ValueError) as exc:
+        except AgendamentoDuplicadoError as exc:
+            st.warning(f"⚠️ {exc}")
+        except (ClienteBloqueadoError, ConflitoDeHorarioError, ValueError) as exc:
             st.error(str(exc))
     else:
         st.warning("⚠️ Preencha todos os campos, incluindo data e horário.")
@@ -84,7 +100,7 @@ if "usuario_logado" in st.session_state:
                 servico_avulso = st.selectbox(
                     "Serviço", options=list(servicos_dict.keys()), index=None, placeholder="Selecione..."
                 )
-            col4, col5 = st.columns(2)
+            col4, col5, col6 = st.columns(3)
             with col4:
                 data_avulso = st.date_input(
                     "Data", value=date.today(), max_value=date.today(), format="DD/MM/YYYY"
@@ -93,10 +109,18 @@ if "usuario_logado" in st.session_state:
                 hora_avulso = st.time_input(
                     "Hora", value=datetime.now().time().replace(second=0, microsecond=0)
                 )
+            with col6:
+                forma_avulso = st.selectbox(
+                    "Forma de pagamento",
+                    options=list(FORMAS_PAGAMENTO.keys()),
+                    format_func=FORMAS_PAGAMENTO.get,
+                    index=None,
+                    placeholder="Selecione...",
+                )
             lancar = st.form_submit_button("Lançar como concluído", type="primary")
 
         if lancar:
-            if cliente_avulso and funcionario_avulso and servico_avulso:
+            if cliente_avulso and funcionario_avulso and servico_avulso and forma_avulso:
                 try:
                     with get_session() as session:
                         agendamento_service.lancar_atendimento_avulso(
@@ -106,13 +130,14 @@ if "usuario_logado" in st.session_state:
                             servicos_dict[servico_avulso],
                             dia=data_avulso,
                             hora=hora_avulso.strftime("%H:%M"),
+                            forma_pagamento=forma_avulso,
                         )
                     st.success("✅ Atendimento avulso lançado como concluído!")
                     st.rerun()
                 except ValueError as exc:
                     st.error(str(exc))
             else:
-                st.warning("⚠️ Selecione cliente, funcionário e serviço.")
+                st.warning("⚠️ Selecione cliente, funcionário, serviço e forma de pagamento.")
 
 
 def _montar_df(linhas) -> pd.DataFrame:
@@ -126,6 +151,7 @@ def _montar_df(linhas) -> pd.DataFrame:
                 "Data": r.data.strftime("%d/%m/%Y"),
                 "Hora": r.hora,
                 "Status": STATUS_LABELS.get(r.status, r.status),
+                "Pagamento": FORMAS_PAGAMENTO.get(r.forma_pagamento, "—"),
             }
             for r in linhas
         ]
@@ -178,23 +204,43 @@ if "usuario_logado" in st.session_state:
             "Atendimentos pendentes", options=list(opcoes.keys()), placeholder="Selecione um ou mais..."
         )
         encerramentos = [s for s in STATUS_LABELS if s != STATUS_AGENDADO]
-        novo_status = st.selectbox(
-            "Encerrar como",
-            options=encerramentos,
-            format_func=STATUS_LABELS.get,
-            index=None,
-            placeholder="Selecione...",
-        )
-        if st.button("Encerrar selecionados", type="primary"):
-            if selecionados and novo_status:
-                with get_session() as session:
-                    alterados = agendamento_service.alterar_status_em_lote(
-                        session, [opcoes[s] for s in selecionados], novo_status
-                    )
-                st.session_state["flash_status"] = (
-                    f"✅ {alterados} atendimento(s) encerrado(s) como {STATUS_LABELS[novo_status]}."
+        col1, col2 = st.columns(2)
+        with col1:
+            novo_status = st.selectbox(
+                "Encerrar como",
+                options=encerramentos,
+                format_func=STATUS_LABELS.get,
+                index=None,
+                placeholder="Selecione...",
+            )
+        forma_encerramento = None
+        if novo_status == STATUS_CONCLUIDO:
+            with col2:
+                forma_encerramento = st.selectbox(
+                    "Forma de pagamento",
+                    options=list(FORMAS_PAGAMENTO.keys()),
+                    format_func=FORMAS_PAGAMENTO.get,
+                    index=None,
+                    placeholder="Selecione...",
                 )
-                st.rerun()
+        if st.button("Encerrar selecionados", type="primary"):
+            if novo_status == STATUS_CONCLUIDO and not forma_encerramento:
+                st.warning("⚠️ Informe a forma de pagamento para concluir o atendimento.")
+            elif selecionados and novo_status:
+                try:
+                    with get_session() as session:
+                        alterados = agendamento_service.alterar_status_em_lote(
+                            session,
+                            [opcoes[s] for s in selecionados],
+                            novo_status,
+                            forma_pagamento=forma_encerramento,
+                        )
+                    st.session_state["flash_status"] = (
+                        f"✅ {alterados} atendimento(s) encerrado(s) como {STATUS_LABELS[novo_status]}."
+                    )
+                    st.rerun()
+                except ConclusaoAntecipadaError as exc:
+                    st.error(str(exc))
             else:
                 st.warning("⚠️ Selecione ao menos um atendimento e como encerrá-lo.")
     else:
@@ -218,16 +264,31 @@ if "usuario_logado" in st.session_state:
                     index=None,
                     placeholder="Selecione...",
                 )
+            forma_corrigida = None
+            if status_corrigido == STATUS_CONCLUIDO:
+                forma_corrigida = st.selectbox(
+                    "Forma de pagamento",
+                    options=list(FORMAS_PAGAMENTO.keys()),
+                    format_func=FORMAS_PAGAMENTO.get,
+                    index=None,
+                    placeholder="Selecione...",
+                    key="forma_corrigida",
+                )
             if st.button("Corrigir lançamento"):
-                if escolhido and status_corrigido:
+                if status_corrigido == STATUS_CONCLUIDO and not forma_corrigida:
+                    st.warning("⚠️ Informe a forma de pagamento para concluir o atendimento.")
+                elif escolhido and status_corrigido:
                     try:
                         with get_session() as session:
                             agendamento_service.alterar_status(
-                                session, opcoes_corrigir[escolhido], status_corrigido
+                                session,
+                                opcoes_corrigir[escolhido],
+                                status_corrigido,
+                                forma_pagamento=forma_corrigida,
                             )
                         st.session_state["flash_status"] = "✅ Lançamento corrigido."
                         st.rerun()
-                    except ConflitoDeHorarioError as exc:
+                    except (ConclusaoAntecipadaError, ConflitoDeHorarioError) as exc:
                         st.error(str(exc))
                 else:
                     st.warning("⚠️ Selecione o atendimento e o novo status.")

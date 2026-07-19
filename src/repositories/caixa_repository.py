@@ -4,7 +4,30 @@ from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from src.database.models import FechamentoCaixa, MovimentoCaixa
+from src.database.models import AberturaCaixa, FechamentoCaixa, MovimentoCaixa
+
+
+def obter_abertura(session: Session, dia: date) -> Optional[AberturaCaixa]:
+    stmt = select(AberturaCaixa).where(AberturaCaixa.data == dia)
+    return session.scalars(stmt).first()
+
+
+def criar_abertura(
+    session: Session, dia: date, valor_inicial: float, hora: str, aberto_por: Optional[str] = None
+) -> AberturaCaixa:
+    abertura = AberturaCaixa(data=dia, valor_inicial=valor_inicial, hora=hora, aberto_por=aberto_por)
+    session.add(abertura)
+    session.commit()
+    return abertura
+
+
+def listar_aberturas(session: Session, inicio: date, fim: date) -> list[AberturaCaixa]:
+    stmt = (
+        select(AberturaCaixa)
+        .where(AberturaCaixa.data.between(inicio, fim))
+        .order_by(AberturaCaixa.data)
+    )
+    return list(session.scalars(stmt))
 
 
 def criar_movimento(session: Session, dia: date, tipo: str, valor: float, descricao: str) -> MovimentoCaixa:

@@ -1,7 +1,7 @@
 import streamlit as st
 
 from src.database.connection import get_session, init_db
-from src.services import auth_service
+from src.services import auth_service, caixa_service
 from utils import load_static_files
 
 st.set_page_config(page_title="Gerenciador de Barbearia", page_icon="💈", layout="wide")
@@ -51,6 +51,26 @@ with st.sidebar:
     else:
         _pagina_login()
 
+# Lembrete inteligente do caixa: acompanha o admin em todas as páginas até o
+# fechamento do dia ser feito (e cobra dias anteriores esquecidos em aberto).
+if logged_in and st.session_state.get("role") == "admin":
+    with get_session() as session:
+        alertas_caixa = caixa_service.pendencias(session)
+    if alertas_caixa:
+        if not st.session_state.get("lembrete_caixa_exibido"):
+            for alerta in alertas_caixa:
+                st.toast(alerta["mensagem"], icon="🔔")
+            st.session_state["lembrete_caixa_exibido"] = True
+        with st.sidebar:
+            st.markdown("#### 🔔 Lembretes do caixa")
+            for alerta in alertas_caixa:
+                if alerta["nivel"] == "erro":
+                    st.error(alerta["mensagem"])
+                elif alerta["nivel"] == "aviso":
+                    st.warning(alerta["mensagem"])
+                else:
+                    st.info(alerta["mensagem"])
+
 # A Agenda é pública (clientes agendam sem login); as demais páginas são da equipe.
 paginas = [st.Page("pages/3_Agenda.py", title="Agenda", icon="📅", default=True)]
 
@@ -64,7 +84,14 @@ if logged_in:
             st.Page("pages/4_Servicos.py", title="Serviços", icon="✂️"),
             st.Page("pages/5_Funcionarios.py", title="Funcionários", icon="🧑‍🔧"),
             st.Page("pages/6_Faturamento.py", title="Faturamento", icon="💵"),
+            st.Page("pages/9_Caixa.py", title="Caixa", icon="🧾"),
+            st.Page("pages/10_Pagamentos.py", title="Pagamentos", icon="🤝"),
+            st.Page("pages/11_Relatorios.py", title="Relatórios", icon="📈"),
+            st.Page("pages/8_Usuarios.py", title="Usuários", icon="🔐"),
         ]
+
+# "Sobre Nós" fica por último para aparecer no canto inferior esquerdo do menu.
+paginas.append(st.Page("pages/7_Sobre.py", title="Sobre Nós", icon="ℹ️"))
 
 pg = st.navigation(paginas)
 pg.run()

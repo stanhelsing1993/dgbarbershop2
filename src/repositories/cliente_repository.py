@@ -35,6 +35,14 @@ def atualizar(session: Session, cliente_id: int, nome: str, telefone: str, email
     session.commit()
 
 
+def definir_bloqueio(session: Session, cliente_id: int, bloqueado: bool) -> None:
+    cliente = session.get(Cliente, cliente_id)
+    if cliente is None:
+        return
+    cliente.bloqueado = bloqueado
+    session.commit()
+
+
 def excluir(session: Session, cliente_id: int) -> None:
     cliente = session.get(Cliente, cliente_id)
     if cliente is not None:
